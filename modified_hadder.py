@@ -40,33 +40,42 @@ if args.data:
     if n_files > batch_size:
         print(f"[INFO] Data detected with > {batch_size} files. Using haddnano.py in batches.")
         tmp_outputs = []
+        skip_merge = False
         num_batches = (n_files - 1) // batch_size + 1
 
         with tqdm(total=num_batches, desc="Merging batches", unit="batch") as pbar:
             for i in range(num_batches):
                 batch_files = root_files[i * batch_size: (i + 1) * batch_size]
-                tmp_file = temp_path / f"tmp_{i}_{output_file}"
+                stem = Path(output_file).stem
+                suffix = Path(output_file).suffix
+                tmp_file = temp_path / f"{stem}_{i}{suffix}"
                 cmd = f'PhysicsTools/NanoAODTools/scripts/haddnano.py {tmp_file} {" ".join(str(f) for f in batch_files)}'
                 tqdm.write(f"[DEBUG] Batch {i+1}/{num_batches}")
                 subprocess.check_call(cmd, shell=True)
+                size_gb = tmp_file.stat().st_size / (1024**3)
+                if size_gb > 3:
+                    tqdm.write(f"[WARNING] {tmp_file.name} is {size_gb:.2f} GB (>3 GB). Will skip final merge.")
+                    skip_merge = True
+
                 tmp_outputs.append(str(tmp_file))
                 pbar.update(1)
-
-        final_cmd = f'PhysicsTools/NanoAODTools/scripts/haddnano.py {temp_path}/{output_file} {" ".join(tmp_outputs)}'
-        total_size_bytes = sum(Path(f).stat().st_size for f in tmp_outputs)
-        total_size_gb = total_size_bytes / (1024**3)
-
-        if total_size_gb > 3:
-            tqdm.write(f"[WARNING] Total size of temporary files is {total_size_gb:.2f} GB (>3 GB). Skipping final merge.")
-            
-            for i, f in enumerate(tmp_outputs):
-                out_path = save_path / f"{Path(f).name}"
+        if not tmp_outputs:
+            tqdm.write("[ERROR] No temporary files were successfully created. Exiting.")
+            exit(1)
+        
+        if skip_merge:
+            tqdm.write(f"[INFO] Skipping final merge due to large individual batch file(s).")
+            for f in tmp_outputs:
+                out_path = save_path / Path(f).name
                 mv_cmd = f'mv {f} {out_path}'
                 tqdm.write(f"[DEBUG] Moving tmp file {f} to {out_path}")
                 subprocess.check_call(mv_cmd, shell=True)
-            
-            tqdm.write(f"[INFO] All batch outputs moved individually. Skipping final merged output.")
-            exit(0)
+
+            tqdm.write(f"[INFO] All batch outputs moved individually.")
+            tqdm.write(f"[INFO] Cleanup skipped — files already moved.")
+            exit(0)        
+
+        final_cmd = f'PhysicsTools/NanoAODTools/scripts/haddnano.py {temp_path}/{output_file} {" ".join(tmp_outputs)}'
         tqdm.write(f"[DEBUG] Final merge")
         subprocess.check_call(final_cmd, shell=True)
 
@@ -84,38 +93,43 @@ else:
     if n_files > batch_size:
         print(f"[INFO] MC detected with > {batch_size} files. Using hadd in batches.")
         tmp_outputs = []
+        skip_merge = False
         num_batches = (n_files - 1) // batch_size + 1
 
         with tqdm(total=num_batches, desc="Merging batches", unit="batch") as pbar:
             for i in range(num_batches):
                 batch_files = root_files[i * batch_size: (i + 1) * batch_size]
-                tmp_file = temp_path / f"{output_file}_{i}"
+                stem = Path(output_file).stem
+                suffix = Path(output_file).suffix
+                tmp_file = temp_path / f"{stem}_{i}{suffix}"
                 cmd = f'hadd {tmp_file} {" ".join(str(f) for f in batch_files)}'
                 tqdm.write(f"[DEBUG] Batch {i+1}/{num_batches}")
                 subprocess.check_call(cmd, shell=True)
+                size_gb = tmp_file.stat().st_size / (1024**3)
+                if size_gb > 1:
+                    tqdm.write(f"[WARNING] {tmp_file.name} is {size_gb:.2f} GB (>1 GB). Will skip final merge.")
+                    skip_merge = True
+
                 tmp_outputs.append(str(tmp_file))
                 pbar.update(1)
 
-        final_cmd = f'hadd {temp_path}/{output_file} {" ".join(tmp_outputs)}'
-        total_size_bytes = sum(Path(f).stat().st_size for f in tmp_outputs)
-        total_size_gb = total_size_bytes / (1024**2)
+        if not tmp_outputs:
+            tqdm.write("[ERROR] No temporary files were successfully created. Exiting.")
+            exit(1)
 
-        if total_size_gb > 3:
-            tqdm.write(f"[WARNING] Total size of temporary files is {total_size_gb:.2f} GB (>3 GB). Skipping final merge.")
-            
-            for i, f in enumerate(tmp_outputs):
-                out_path = save_path / f"{Path(f).name}"
+        if skip_merge:
+            tqdm.write(f"[INFO] Skipping final merge due to large individual batch file(s).")
+            for f in tmp_outputs:
+                out_path = save_path / Path(f).name
                 mv_cmd = f'mv {f} {out_path}'
                 tqdm.write(f"[DEBUG] Moving tmp file {f} to {out_path}")
                 subprocess.check_call(mv_cmd, shell=True)
-            
-            tqdm.write(f"[INFO] All batch outputs moved individually. Skipping final merged output.")
-            for f in tmp_outputs:
-                try:
-                    Path(f).unlink()
-                except Exception as e:
-                    tqdm.write(f"[WARNING] Could not delete {f}: {e}")
+
+            tqdm.write(f"[INFO] All batch outputs moved individually")
+            tqdm.write(f"[INFO] Cleanup skipped — files already moved.")
             exit(0)
+
+        final_cmd = f'hadd {temp_path}/{output_file} {" ".join(tmp_outputs)}'
         tqdm.write(f"[DEBUG] Final merge")
         subprocess.check_call(final_cmd, shell=True)
 
