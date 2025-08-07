@@ -1,6 +1,6 @@
 ## Hadding ROOT files in batches
 
-#Usage 
+# Usage 
 
 ```
 python3 haddFiles_batchFiles.py \
