@@ -106,7 +106,7 @@ else:
                 tqdm.write(f"[DEBUG] Batch {i+1}/{num_batches}")
                 subprocess.check_call(cmd, shell=True)
                 size_gb = tmp_file.stat().st_size / (1024**3)
-                if size_gb > 1:
+                if size_gb > 3:
                     tqdm.write(f"[WARNING] {tmp_file.name} is {size_gb:.2f} GB (>1 GB). Will skip final merge.")
                     skip_merge = True
 
